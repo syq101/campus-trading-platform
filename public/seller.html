@@ -29,6 +29,7 @@
         .product-item button { padding: 5px 10px; margin-right: 5px; border: none; border-radius: 4px; cursor: pointer; }
         .product-item .edit-btn { background: #2196F3; color: white; }
         .product-item .delete-btn { background: #f44336; color: white; }
+        .product-item .remove-btn { background: #ff9800; color: white; }
         .order-item { padding: 15px; border-bottom: 1px solid #eee; }
         .order-item:last-child { border-bottom: none; }
         .order-item h4 { margin-bottom: 10px; }
@@ -36,6 +37,7 @@
         .order-item .buyer { color: #666; font-size: 14px; }
         .order-item .status { margin: 10px 0; padding: 5px 10px; display: inline-block; border-radius: 4px; font-size: 12px; }
         .status-pending { background: #fff3e0; color: #e65100; }
+        .status-shipped { background: #e8f5e9; color: #2e7d32; }
         .status-cancelled { background: #e0e0e0; color: #616161; }
         .status-return-requested { background: #e3f2fd; color: #1565c0; }
         .status-return-approved { background: #e8f5e9; color: #2e7d32; }
@@ -43,10 +45,13 @@
         .order-item .return-reason { color: #666; font-size: 14px; margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 4px; }
         .order-item .actions { margin-top: 10px; }
         .order-item button { padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px; }
+        .order-item .ship-btn { background: #2196F3; color: white; }
         .order-item .approve-btn { background: #4CAF50; color: white; }
         .order-item .reject-btn { background: #f44336; color: white; }
-        .notification-item { padding: 10px; border-bottom: 1px solid #eee; }
+        .notification-item { padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: flex-start; }
         .notification-item.unread { background: #e3f2fd; }
+        .notification-item .delete-btn { padding: 2px 8px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-left: 10px; }
+        .notification-item .content { flex: 1; cursor: pointer; }
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; }
         .modal-content { background: white; width: 90%; max-width: 400px; margin: 100px auto; padding: 20px; border-radius: 8px; }
         .modal-content h3 { margin-bottom: 15px; }
@@ -138,8 +143,13 @@
                             <div class="actions">
                                 ${p.status === 'available' ? `
                                     <button class="edit-btn" onclick="openEditModal(${p.id}, '${escapeHtml(p.name)}', ${p.price}, '${escapeHtml(p.description || '')}')">编辑</button>
+                                    <button class="remove-btn" onclick="removeProduct(${p.id})">下架</button>
                                     <button class="delete-btn" onclick="deleteProduct(${p.id})">删除</button>
-                                ` : ''}
+                                ` : `
+                                    <button class="edit-btn" onclick="openEditModal(${p.id}, '${escapeHtml(p.name)}', ${p.price}, '${escapeHtml(p.description || '')}')">编辑</button>
+                                    <button class="remove-btn" onclick="reactivateProduct(${p.id})">重新上架</button>
+                                    <button class="delete-btn" onclick="deleteProduct(${p.id})">删除</button>
+                                `}
                             </div>
                         </li>
                     `).join('');
@@ -243,6 +253,48 @@
                 });
         }
         
+        function removeProduct(id) {
+            if (!confirm('确定要下架这个商品吗？')) return;
+            
+            fetch(`${API_BASE}/products/${id}/remove`, {
+                method: 'PUT'
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    alert('下架失败：' + data.error);
+                } else {
+                    alert('下架成功！');
+                    loadProducts();
+                }
+            })
+            .catch(err => {
+                console.error('下架失败:', err);
+                alert('下架失败，请稍后重试');
+            });
+        }
+        
+        function reactivateProduct(id) {
+            if (!confirm('确定要重新上架这个商品吗？')) return;
+            
+            fetch(`${API_BASE}/products/${id}/reactivate`, {
+                method: 'PUT'
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    alert('重新上架失败：' + data.error);
+                } else {
+                    alert('重新上架成功！');
+                    loadProducts();
+                }
+            })
+            .catch(err => {
+                console.error('重新上架失败:', err);
+                alert('重新上架失败，请稍后重试');
+            });
+        }
+        
         function loadOrders() {
             fetch(`${API_BASE}/orders/seller/${currentSeller}`)
                 .then(res => res.json())
@@ -256,7 +308,10 @@
                             let statusText = '待发货';
                             let itemStyle = '';
                             
-                            if (o.status === 'cancelled') {
+                            if (o.status === 'shipped') {
+                                statusClass = 'status-shipped';
+                                statusText = '已发货';
+                            } else if (o.status === 'cancelled') {
                                 statusClass = 'status-cancelled';
                                 statusText = '已取消';
                                 itemStyle = 'background:#f5f5f5;';
@@ -272,16 +327,21 @@
                                 statusText = '退货已拒绝';
                             }
                             
+                            const canShip = o.status === 'pending' && o.return_status === 'none';
                             const canHandleReturn = o.return_status === 'requested' && o.status !== 'cancelled';
+                            
+                            const quantity = o.quantity || 1;
+                            const totalPrice = o.price * quantity;
                             
                             return `
                                 <li class="order-item" style="${itemStyle}">
                                     <h4>${escapeHtml(o.product_name)}</h4>
-                                    <div class="price">¥${o.price.toFixed(2)}</div>
+                                    <div class="price">¥${o.price.toFixed(2)} × ${quantity} = ¥${totalPrice.toFixed(2)}</div>
                                     <div class="buyer">买家：${escapeHtml(o.buyer)}</div>
                                     <div class="status ${statusClass}">${statusText}</div>
                                     ${o.return_reason ? `<div class="return-reason">退货原因：${escapeHtml(o.return_reason)}</div>` : ''}
                                     <div class="actions">
+                                        ${canShip ? `<button class="ship-btn" onclick="shipOrder(${o.id})">发货</button>` : ''}
                                         ${canHandleReturn ? `
                                             <button class="approve-btn" onclick="approveReturn(${o.id})">同意退货</button>
                                             <button class="reject-btn" onclick="rejectReturn(${o.id})">拒绝退货</button>
@@ -338,6 +398,27 @@
             });
         }
         
+        function shipOrder(orderId) {
+            if (!confirm('确定要发货吗？')) return;
+            
+            fetch(`${API_BASE}/orders/${orderId}/ship`, {
+                method: 'PUT'
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    alert('发货失败：' + data.error);
+                } else {
+                    alert('发货成功！');
+                    loadOrders();
+                }
+            })
+            .catch(err => {
+                console.error('发货失败:', err);
+                alert('发货失败，请稍后重试');
+            });
+        }
+        
         function loadNotifications() {
             fetch(`${API_BASE}/notifications/${currentSeller}`)
                 .then(res => res.json())
@@ -357,9 +438,12 @@
                         list.innerHTML = '<li class="notification-item" style="color:#999;">暂无通知</li>';
                     } else {
                         list.innerHTML = notifications.slice(0, 5).map(n => `
-                            <li class="notification-item ${n.read ? '' : 'unread'}" onclick="markAsRead(${n.id})">
-                                ${escapeHtml(n.message)}
-                                <div style="color:#999;font-size:12px;">${new Date(n.created_at).toLocaleString()}</div>
+                            <li class="notification-item ${n.read ? '' : 'unread'}">
+                                <div class="content" onclick="markAsRead(${n.id})">
+                                    ${escapeHtml(n.message)}
+                                    <div style="color:#999;font-size:12px;">${new Date(n.created_at).toLocaleString()}</div>
+                                </div>
+                                <button class="delete-btn" onclick="deleteNotification(${n.id}, event)">删除</button>
                             </li>
                         `).join('');
                     }
@@ -371,6 +455,25 @@
             fetch(`${API_BASE}/notifications/${id}/read`, { method: 'PUT' })
                 .then(() => loadNotifications())
                 .catch(err => console.error('标记已读失败:', err));
+        }
+        
+        function deleteNotification(id, event) {
+            event.stopPropagation();
+            if (!confirm('确定要删除这条通知吗？')) return;
+            
+            fetch(`${API_BASE}/notifications/${id}`, { method: 'DELETE' })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) {
+                        alert('删除失败：' + data.error);
+                    } else {
+                        loadNotifications();
+                    }
+                })
+                .catch(err => {
+                    console.error('删除失败:', err);
+                    alert('删除失败，请稍后重试');
+                });
         }
         
         function escapeHtml(text) {

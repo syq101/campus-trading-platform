@@ -72,37 +72,26 @@ app.get('/api/products/seller/:seller', (req, res) => {
 });
 
 app.post('/api/orders', (req, res) => {
-  const { product_id, buyer, seller } = req.body;
+  const { product_id, buyer, seller, quantity = 1 } = req.body;
   
   db.run(
-    'INSERT INTO orders (product_id, buyer, seller) VALUES (?, ?, ?)',
-    [product_id, buyer, seller],
+    'INSERT INTO orders (product_id, buyer, seller, quantity) VALUES (?, ?, ?, ?)',
+    [product_id, buyer, seller, quantity],
     function(err) {
       if (err) {
         res.status(500).json({ error: err.message });
         return;
       }
       
+      const message = `买家 ${buyer} 购买了 ${quantity} 件您的商品！`;
       db.run(
-        'UPDATE products SET status = "sold" WHERE id = ?',
-        [product_id],
-        (updateErr) => {
-          if (updateErr) {
-            res.status(500).json({ error: updateErr.message });
-            return;
+        'INSERT INTO notifications (recipient, message, type) VALUES (?, ?, ?)',
+        [seller, message, 'order'],
+        (notifErr) => {
+          if (!notifErr) {
+            io.emit('notification', { recipient: seller, message, type: 'order' });
           }
-          
-          const message = `买家 ${buyer} 购买了您的商品！`;
-          db.run(
-            'INSERT INTO notifications (recipient, message, type) VALUES (?, ?, ?)',
-            [seller, message, 'order'],
-            (notifErr) => {
-              if (!notifErr) {
-                io.emit('notification', { recipient: seller, message, type: 'order' });
-              }
-              res.json({ id: this.lastID, product_id, buyer, seller, status: 'pending' });
-            }
-          );
+          res.json({ id: this.lastID, product_id, buyer, seller, quantity, status: 'pending' });
         }
       );
     }
@@ -327,6 +316,162 @@ app.put('/api/notifications/:id/read', (req, res) => {
     function(err) {
       if (err) res.status(500).json({ error: err.message });
       else res.json({ message: 'Notification marked as read' });
+    }
+  );
+});
+
+app.delete('/api/notifications/:id', (req, res) => {
+  db.run(
+    'DELETE FROM notifications WHERE id = ?',
+    [req.params.id],
+    function(err) {
+      if (err) res.status(500).json({ error: err.message });
+      else if (this.changes === 0) res.status(404).json({ error: 'Notification not found' });
+      else res.json({ message: 'Notification deleted successfully' });
+    }
+  );
+});
+
+app.put('/api/orders/:id/ship', (req, res) => {
+  const orderId = req.params.id;
+  
+  db.get('SELECT * FROM orders WHERE id = ?', [orderId], (err, order) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    if (!order) {
+      res.status(404).json({ error: 'Order not found' });
+      return;
+    }
+    
+    if (order.status === 'shipped') {
+      res.status(400).json({ error: '订单已发货' });
+      return;
+    }
+    
+    if (order.status === 'cancelled') {
+      res.status(400).json({ error: '订单已取消，无法发货' });
+      return;
+    }
+    
+    db.run(
+      'UPDATE orders SET status = "shipped" WHERE id = ?',
+      [orderId],
+      function(updateErr) {
+        if (updateErr) {
+          res.status(500).json({ error: updateErr.message });
+          return;
+        }
+        
+        const message = `您的订单已发货！`;
+        db.run(
+          'INSERT INTO notifications (recipient, message, type) VALUES (?, ?, ?)',
+          [order.buyer, message, 'order_shipped'],
+          (notifErr) => {
+            if (!notifErr) {
+              io.emit('notification', { recipient: order.buyer, message, type: 'order_shipped' });
+            }
+            res.json({ message: 'Order shipped successfully' });
+          }
+        );
+      }
+    );
+  });
+});
+
+app.put('/api/orders/:id/update', (req, res) => {
+  const orderId = req.params.id;
+  const { product_id, quantity } = req.body;
+  
+  db.get('SELECT * FROM orders WHERE id = ?', [orderId], (err, order) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    if (!order) {
+      res.status(404).json({ error: 'Order not found' });
+      return;
+    }
+    
+    if (order.status === 'shipped') {
+      res.status(400).json({ error: '订单已发货，无法修改' });
+      return;
+    }
+    
+    if (order.status === 'cancelled') {
+      res.status(400).json({ error: '订单已取消，无法修改' });
+      return;
+    }
+    
+    if (order.return_status !== 'none') {
+      res.status(400).json({ error: '该订单已有退货申请，无法修改' });
+      return;
+    }
+    
+    db.run(
+      'UPDATE orders SET product_id = ?, quantity = ? WHERE id = ?',
+      [product_id, quantity, orderId],
+      function(updateErr) {
+        if (updateErr) {
+          res.status(500).json({ error: updateErr.message });
+          return;
+        }
+        
+        db.get('SELECT name as product_name FROM products WHERE id = ?', [product_id], (productErr, product) => {
+          const message = `买家 ${order.buyer} 修改了订单商品为 ${product ? product.product_name : '未知商品'}，数量为 ${quantity} 件`;
+          db.run(
+            'INSERT INTO notifications (recipient, message, type) VALUES (?, ?, ?)',
+            [order.seller, message, 'order_updated'],
+            (notifErr) => {
+              if (!notifErr) {
+                io.emit('notification', { recipient: order.seller, message, type: 'order_updated' });
+              }
+              res.json({ message: 'Order updated successfully' });
+            }
+          );
+        });
+      }
+    );
+  });
+});
+
+app.put('/api/products/:id/remove', (req, res) => {
+  const productId = req.params.id;
+  
+  db.run(
+    'UPDATE products SET status = "sold" WHERE id = ?',
+    [productId],
+    function(err) {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      if (this.changes === 0) {
+        res.status(404).json({ error: 'Product not found' });
+        return;
+      }
+      res.json({ message: 'Product removed successfully' });
+    }
+  );
+});
+
+app.put('/api/products/:id/reactivate', (req, res) => {
+  const productId = req.params.id;
+  
+  db.run(
+    'UPDATE products SET status = "available" WHERE id = ?',
+    [productId],
+    function(err) {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      if (this.changes === 0) {
+        res.status(404).json({ error: 'Product not found' });
+        return;
+      }
+      res.json({ message: 'Product reactivated successfully' });
     }
   );
 });
