@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>校园二手交易 - 卖家端</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f5f5f5; }
+        .header { background: #FF9800; color: white; padding: 20px; text-align: center; }
+        .container { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
+        .user-info { margin-bottom: 20px; padding: 15px; background: white; border-radius: 8px; }
+        .user-info input { padding: 8px; margin-right: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        .user-info button { padding: 8px 16px; background: #FF9800; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px; }
+        .notification-badge { background: #f44336; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px; margin-left: 5px; }
+        .sections { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 768px) { .sections { grid-template-columns: 1fr; } }
+        .section { background: white; border-radius: 8px; padding: 20px; }
+        .section h2 { margin-bottom: 15px; color: #333; border-bottom: 2px solid #FF9800; padding-bottom: 10px; }
+        .product-form { margin-bottom: 20px; padding: 15px; background: #f9f9f9; border-radius: 8px; }
+        .product-form input, .product-form textarea { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        .product-form button { width: 100%; padding: 10px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .product-list { list-style: none; }
+        .product-item { padding: 15px; border-bottom: 1px solid #eee; }
+        .product-item:last-child { border-bottom: none; }
+        .product-item h4 { margin-bottom: 5px; }
+        .product-item .price { color: #4CAF50; font-weight: bold; }
+        .product-item .actions { margin-top: 10px; }
+        .product-item button { padding: 5px 10px; margin-right: 5px; border: none; border-radius: 4px; cursor: pointer; }
+        .product-item .edit-btn { background: #2196F3; color: white; }
+        .product-item .delete-btn { background: #f44336; color: white; }
+        .order-item { padding: 15px; border-bottom: 1px solid #eee; }
+        .order-item:last-child { border-bottom: none; }
+        .order-item h4 { margin-bottom: 10px; }
+        .order-item .price { color: #4CAF50; font-weight: bold; font-size: 18px; }
+        .order-item .buyer { color: #666; font-size: 14px; }
+        .order-item .status { margin: 10px 0; padding: 5px 10px; display: inline-block; border-radius: 4px; font-size: 12px; }
+        .status-pending { background: #fff3e0; color: #e65100; }
+        .status-cancelled { background: #e0e0e0; color: #616161; }
+        .status-return-requested { background: #e3f2fd; color: #1565c0; }
+        .status-return-approved { background: #e8f5e9; color: #2e7d32; }
+        .status-return-rejected { background: #ffebee; color: #c62828; }
+        .order-item .return-reason { color: #666; font-size: 14px; margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 4px; }
+        .order-item .actions { margin-top: 10px; }
+        .order-item button { padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px; }
+        .order-item .approve-btn { background: #4CAF50; color: white; }
+        .order-item .reject-btn { background: #f44336; color: white; }
+        .notification-item { padding: 10px; border-bottom: 1px solid #eee; }
+        .notification-item.unread { background: #e3f2fd; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; }
+        .modal-content { background: white; width: 90%; max-width: 400px; margin: 100px auto; padding: 20px; border-radius: 8px; }
+        .modal-content h3 { margin-bottom: 15px; }
+        .modal-content input, .modal-content textarea { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        .modal-content button { width: 100%; padding: 10px; margin-top: 10px; border: none; border-radius: 4px; cursor: pointer; }
+        .modal-content .save-btn { background: #4CAF50; color: white; }
+        .modal-content .cancel-btn { background: #999; color: white; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>校园二手交易平台 - 卖家端</h1>
+    </div>
+    
+    <div class="container">
+        <div class="user-info">
+            <label>卖家昵称：</label>
+            <input type="text" id="sellerName" placeholder="输入您的昵称" value="seller1">
+            <button onclick="loadAllData()">刷新数据</button>
+            <span id="notificationBadge" class="notification-badge" style="display:none;">0</span>
+        </div>
+        
+        <div class="sections">
+            <div class="section">
+                <h2>商品管理</h2>
+                <div class="product-form">
+                    <h3>添加新商品</h3>
+                    <input type="text" id="newProductName" placeholder="商品名称">
+                    <input type="number" id="newProductPrice" placeholder="价格" step="0.01">
+                    <textarea id="newProductDesc" placeholder="商品描述" rows="3"></textarea>
+                    <button onclick="addProduct()">添加商品</button>
+                </div>
+                <ul class="product-list" id="productList"></ul>
+            </div>
+            
+            <div class="section">
+                <h2>订单通知</h2>
+                <h3>最新通知</h3>
+                <ul id="notificationList" style="list-style:none; margin-bottom:20px;"></ul>
+                <h3>订单列表</h3>
+                <ul id="orderList" style="list-style:none;"></ul>
+            </div>
+        </div>
+    </div>
+    
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <h3>编辑商品</h3>
+            <input type="hidden" id="editProductId">
+            <input type="text" id="editProductName" placeholder="商品名称">
+            <input type="number" id="editProductPrice" placeholder="价格" step="0.01">
+            <textarea id="editProductDesc" placeholder="商品描述" rows="3"></textarea>
+            <button class="save-btn" onclick="saveEdit()">保存</button>
+            <button class="cancel-btn" onclick="closeModal()">取消</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const API_BASE = '/api';
+        let currentSeller = '';
+        
+        function getSellerName() {
+            return document.getElementById('sellerName').value.trim();
+        }
+        
+        function loadAllData() {
+            currentSeller = getSellerName();
+            if (!currentSeller) {
+                alert('请先输入卖家昵称！');
+                return;
+            }
+            loadProducts();
+            loadOrders();
+            loadNotifications();
+        }
+        
+        function loadProducts() {
+            fetch(`${API_BASE}/products/seller/${currentSeller}`)
+                .then(res => res.json())
+                .then(products => {
+                    const list = document.getElementById('productList');
+                    list.innerHTML = products.map(p => `
+                        <li class="product-item">
+                            <h4>${escapeHtml(p.name)}</h4>
+                            <div class="price">¥${p.price.toFixed(2)}</div>
+                            <div>${escapeHtml(p.description || '暂无描述')}</div>
+                            <div style="color:#666;font-size:12px;margin-top:5px;">状态：${p.status === 'available' ? '在售' : '已售出'}</div>
+                            <div class="actions">
+                                ${p.status === 'available' ? `
+                                    <button class="edit-btn" onclick="openEditModal(${p.id}, '${escapeHtml(p.name)}', ${p.price}, '${escapeHtml(p.description || '')}')">编辑</button>
+                                    <button class="delete-btn" onclick="deleteProduct(${p.id})">删除</button>
+                                ` : ''}
+                            </div>
+                        </li>
+                    `).join('');
+                })
+                .catch(err => console.error('加载商品失败:', err));
+        }
+        
+        function addProduct() {
+            const name = document.getElementById('newProductName').value.trim();
+            const price = parseFloat(document.getElementById('newProductPrice').value);
+            const description = document.getElementById('newProductDesc').value.trim();
+            
+            if (!name || isNaN(price)) {
+                alert('请填写完整的商品信息！');
+                return;
+            }
+            
+            fetch(`${API_BASE}/products`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, price, description, seller: currentSeller })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    alert('添加失败：' + data.error);
+                } else {
+                    alert('添加成功！');
+                    document.getElementById('newProductName').value = '';
+                    document.getElementById('newProductPrice').value = '';
+                    document.getElementById('newProductDesc').value = '';
+                    loadProducts();
+                }
+            })
+            .catch(err => {
+                console.error('添加失败:', err);
+                alert('添加失败，请稍后重试');
+            });
+        }
+        
+        function openEditModal(id, name, price, description) {
+            document.getElementById('editProductId').value = id;
+            document.getElementById('editProductName').value = name;
+            document.getElementById('editProductPrice').value = price;
+            document.getElementById('editProductDesc').value = description;
+            document.getElementById('editModal').style.display = 'block';
+        }
+        
+        function closeModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+        
+        function saveEdit() {
+            const id = parseInt(document.getElementById('editProductId').value);
+            const name = document.getElementById('editProductName').value.trim();
+            const price = parseFloat(document.getElementById('editProductPrice').value);
+            const description = document.getElementById('editProductDesc').value.trim();
+            
+            if (!name || isNaN(price)) {
+                alert('请填写完整的商品信息！');
+                return;
+            }
+            
+            fetch(`${API_BASE}/products/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, price, description })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    alert('修改失败：' + data.error);
+                } else {
+                    alert('修改成功！');
+                    closeModal();
+                    loadProducts();
+                }
+            })
+            .catch(err => {
+                console.error('修改失败:', err);
+                alert('修改失败，请稍后重试');
+            });
+        }
+        
+        function deleteProduct(id) {
+            if (!confirm('确定要删除这个商品吗？')) return;
+            
+            fetch(`${API_BASE}/products/${id}`, { method: 'DELETE' })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) {
+                        alert('删除失败：' + data.error);
+                    } else {
+                        alert('删除成功！');
+                        loadProducts();
+                    }
+                })
+                .catch(err => {
+                    console.error('删除失败:', err);
+                    alert('删除失败，请稍后重试');
+                });
+        }
+        
+        function loadOrders() {
+            fetch(`${API_BASE}/orders/seller/${currentSeller}`)
+                .then(res => res.json())
+                .then(orders => {
+                    const list = document.getElementById('orderList');
+                    if (orders.length === 0) {
+                        list.innerHTML = '<li style="color:#999;padding:15px;">暂无订单</li>';
+                    } else {
+                        list.innerHTML = orders.map(o => {
+                            let statusClass = 'status-pending';
+                            let statusText = '待发货';
+                            let itemStyle = '';
+                            
+                            if (o.status === 'cancelled') {
+                                statusClass = 'status-cancelled';
+                                statusText = '已取消';
+                                itemStyle = 'background:#f5f5f5;';
+                            } else if (o.return_status === 'requested') {
+                                statusClass = 'status-return-requested';
+                                statusText = '退货申请中';
+                                itemStyle = 'background:#e3f2fd;';
+                            } else if (o.return_status === 'approved') {
+                                statusClass = 'status-return-approved';
+                                statusText = '退货已同意';
+                            } else if (o.return_status === 'rejected') {
+                                statusClass = 'status-return-rejected';
+                                statusText = '退货已拒绝';
+                            }
+                            
+                            const canHandleReturn = o.return_status === 'requested' && o.status !== 'cancelled';
+                            
+                            return `
+                                <li class="order-item" style="${itemStyle}">
+                                    <h4>${escapeHtml(o.product_name)}</h4>
+                                    <div class="price">¥${o.price.toFixed(2)}</div>
+                                    <div class="buyer">买家：${escapeHtml(o.buyer)}</div>
+                                    <div class="status ${statusClass}">${statusText}</div>
+                                    ${o.return_reason ? `<div class="return-reason">退货原因：${escapeHtml(o.return_reason)}</div>` : ''}
+                                    <div class="actions">
+                                        ${canHandleReturn ? `
+                                            <button class="approve-btn" onclick="approveReturn(${o.id})">同意退货</button>
+                                            <button class="reject-btn" onclick="rejectReturn(${o.id})">拒绝退货</button>
+                                        ` : ''}
+                                    </div>
+                                    <div style="color:#999;font-size:12px;margin-top:10px;">${new Date(o.created_at).toLocaleString()}</div>
+                                </li>
+                            `;
+                        }).join('');
+                    }
+                })
+                .catch(err => console.error('加载订单失败:', err));
+        }
+        
+        function approveReturn(orderId) {
+            if (!confirm('确定同意退货吗？')) return;
+            
+            fetch(`${API_BASE}/orders/${orderId}/return/approve`, {
+                method: 'PUT'
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    alert('操作失败：' + data.error);
+                } else {
+                    alert('已同意退货！');
+                    loadAllData();
+                }
+            })
+            .catch(err => {
+                console.error('操作失败:', err);
+                alert('操作失败，请稍后重试');
+            });
+        }
+        
+        function rejectReturn(orderId) {
+            if (!confirm('确定拒绝退货吗？')) return;
+            
+            fetch(`${API_BASE}/orders/${orderId}/return/reject`, {
+                method: 'PUT'
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    alert('操作失败：' + data.error);
+                } else {
+                    alert('已拒绝退货！');
+                    loadOrders();
+                }
+            })
+            .catch(err => {
+                console.error('操作失败:', err);
+                alert('操作失败，请稍后重试');
+            });
+        }
+        
+        function loadNotifications() {
+            fetch(`${API_BASE}/notifications/${currentSeller}`)
+                .then(res => res.json())
+                .then(notifications => {
+                    const list = document.getElementById('notificationList');
+                    const unreadCount = notifications.filter(n => !n.read).length;
+                    const badge = document.getElementById('notificationBadge');
+                    
+                    if (unreadCount > 0) {
+                        badge.textContent = unreadCount;
+                        badge.style.display = 'inline';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                    
+                    if (notifications.length === 0) {
+                        list.innerHTML = '<li class="notification-item" style="color:#999;">暂无通知</li>';
+                    } else {
+                        list.innerHTML = notifications.slice(0, 5).map(n => `
+                            <li class="notification-item ${n.read ? '' : 'unread'}" onclick="markAsRead(${n.id})">
+                                ${escapeHtml(n.message)}
+                                <div style="color:#999;font-size:12px;">${new Date(n.created_at).toLocaleString()}</div>
+                            </li>
+                        `).join('');
+                    }
+                })
+                .catch(err => console.error('加载通知失败:', err));
+        }
+        
+        function markAsRead(id) {
+            fetch(`${API_BASE}/notifications/${id}/read`, { method: 'PUT' })
+                .then(() => loadNotifications())
+                .catch(err => console.error('标记已读失败:', err));
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        const socket = io();
+        socket.on('notification', (data) => {
+            if (data.recipient === currentSeller) {
+                alert('新通知：' + data.message);
+                loadAllData();
+            }
+        });
+        
+        document.getElementById('editModal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+        
+        currentSeller = getSellerName();
+        loadAllData();
+    </script>
+</body>
+</html>
